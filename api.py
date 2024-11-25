@@ -64,12 +64,17 @@ async def predict_emotions_endpoint(request: TextRequest):
 def get_comments_instagram(username, password, post_shortcode):
     L = instaloader.Instaloader()
 
+    session_file = f"./session-{username}"
+
     # Login
     try:
-        L.load_session_from_file(username)
+        L.load_session_from_file(username, filename=session_file)
     except FileNotFoundError:
-        L.login(username, password)
-        L.save_session_to_file()
+        try:
+            L.login(username, password)
+            L.save_session_to_file(filename=session_file)
+        except Exception as e:
+            raise HTTPException(status_code=401, detail=f"Erro ao fazer login: {e}")
 
     # Coletar o post
     try:
