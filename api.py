@@ -1,0 +1,91 @@
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
+import torch
+import instaloader
+import gdown
+
+url = "https://drive.google.com/drive/folders/1yXytE9ozUThCTdGawYve8h2XGLD_C9Wh"
+
+output_dir = "./model"
+gdown.download_folder(url, output=output_dir, quiet=False, use_cookies=False)
+
+# Inicializa o modelo e o tokenizer
+path_model = "./model"
+model = AutoModelForSequenceClassification.from_pretrained(path_model)
+tokenizer = AutoTokenizer.from_pretrained(path_model)
+
+# Labels de emoções
+emotion_labels = [
+    "admiration", "amusement", "anger", "annoyance", "approval", "caring",
+    "confusion", "curiosity", "desire", "disappointment", "disapproval", "disgust",
+    "embarrassment", "excitement", "fear", "gratitude", "grief", "joy",
+    "love", "nervousness", "optimism", "pride", "realization", "relief", "remorse",
+    "sadness", "surprise", "neutral"
+]
+
+# Inicializa o FastAPI
+app = FastAPI()
+
+# Classe de modelo para receber os textos na requisição
+class TextRequest(BaseModel):
+    texts: list[str]  # Lista de textos para análise
+
+class InstagramRequest(BaseModel):
+    username: str  # Nome de usuário do Instagram
+    password: str  # Senha do Instagram
+    post_shortcode: str  # Shortcode do post no Instagram
+
+# Função para prever emoções de uma lista de textos
+def predict_emotions_batch(texts):
+    inputs = tokenizer(texts, return_tensors="pt", truncation=True, padding=True)
+    with torch.no_grad():
+        outputs = model(**inputs)
+        logits = outputs.logits
+    probs = torch.sigmoid(logits).cpu().numpy()
+    threshold = 0.5
+
+    results = []
+    for text, prob_array in zip(texts, probs):
+        predicted_emotions = [i for i, prob in enumerate(prob_array) if prob >= threshold]
+        emotion_names = [emotion_labels[idx] for idx in predicted_emotions]
+        results.append({"texto": text, "emocao_prevista": emotion_names})
+    
+    return results
+
+# Endpoint para prever emoções
+@app.post("/predict_emotions")
+async def predict_emotions_endpoint(request: TextRequest):
+    texts = request.texts
+    results = predict_emotions_batch(texts)
+    return results
+
+# Função para obter comentários de um post no Instagram
+def get_comments_instagram(username, password, post_shortcode):
+    L = instaloader.Instaloader()
+
+    # Login
+    try:
+        L.load_session_from_file(username)
+    except FileNotFoundError:
+        L.login(username, password)
+        L.save_session_to_file()
+
+    # Coletar o post
+    try:
+        post = instaloader.Post.from_shortcode(L.context, post_shortcode)
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"Post não encontrado: {e}")
+
+    # Coletar os comentários
+    comments = []
+    for comment in post.get_comments():
+        comments.append(comment.text)
+
+    return comments
+
+# Endpoint para obter comentários do Instagram
+@app.post("/get_comments")
+async def get_comments_endpoint(request: InstagramRequest):
+    comments = get_comments_instagram(request.username, request.password, request.post_shortcode)
+    return comments
