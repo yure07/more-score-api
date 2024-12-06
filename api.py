@@ -73,9 +73,9 @@ async def predict_emotions_endpoint(request: TextRequest):
 # Função para obter comentários de um post no Instagram
 def get_comments_instagram(username, password, post_shortcode):
     L = instaloader.Instaloader()
+    L.context.user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
     session_file = f"./session-{username}"
 
-    # Função auxiliar para recriar sessão, se necessário
     def login_and_save_session():
         try:
             L.login(username, password)
@@ -83,35 +83,35 @@ def get_comments_instagram(username, password, post_shortcode):
         except Exception as e:
             raise HTTPException(status_code=401, detail=f"Erro ao fazer login: {e}")
 
-    # Tentativa de carregar sessão
     try:
         if os.path.exists(session_file):
             L.load_session_from_file(username, filename=session_file)
         else:
             login_and_save_session()
     except instaloader.exceptions.ConnectionException as e:
-        # Caso a sessão esteja inválida ou corrompida
         login_and_save_session()
 
-    # Coletar o post pelo shortcode
+    # Validar sessão
+    try:
+        profile = instaloader.Profile.from_username(L.context, username)
+        if not profile.is_followed_by:
+            raise HTTPException(status_code=403, detail="Sessão inválida ou sem permissão.")
+    except Exception as e:
+        raise HTTPException(status_code=403, detail=f"Erro ao validar sessão: {e}")
+
+    # Coletar post
     try:
         post = instaloader.Post.from_shortcode(L.context, post_shortcode)
-    except instaloader.exceptions.QueryReturnedNotFoundException:
-        raise HTTPException(status_code=404, detail="Post não encontrado.")
-    except instaloader.exceptions.ConnectionException as e:
-        raise HTTPException(status_code=500, detail=f"Erro de conexão ao buscar post: {e}")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro desconhecido ao buscar post: {e}")
+        raise HTTPException(status_code=404, detail=f"Post não encontrado: {e}")
 
     # Coletar comentários
     comments = []
     try:
         for comment in post.get_comments():
             comments.append(comment.text)
-    except instaloader.exceptions.ConnectionException as e:
-        raise HTTPException(status_code=500, detail=f"Erro de conexão ao coletar comentários: {e}")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro desconhecido ao coletar comentários: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao coletar comentários: {e}")
 
     return comments
 
