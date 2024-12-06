@@ -73,6 +73,7 @@ async def predict_emotions_endpoint(request: TextRequest):
 # Função para obter comentários de um post no Instagram
 def get_comments_instagram(username, password, post_shortcode):
     L = instaloader.Instaloader()
+    L.context.http_proxies = {"http": "http://proxy_host:proxy_port", "https": "http://proxy_host:proxy_port"}
     L.context.user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
     session_file = f"./session-{username}"
 
