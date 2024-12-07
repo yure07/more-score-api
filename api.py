@@ -3,8 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import torch
-import requests
 import gdown
+import httpx
 
 url = "https://drive.google.com/drive/folders/1yXytE9ozUThCTdGawYve8h2XGLD_C9Wh"
 
@@ -68,31 +68,25 @@ async def predict_emotions_endpoint(request: TextRequest):
     return results
 
 # Função para obter comentários de um video no youtube
-def get_comments(api_key, video_id):
-    url = f"https://www.googleapis.com/youtube/v3/commentThreads"
+async def get_comments(api_key, video_id):
+    url = "https://www.googleapis.com/youtube/v3/commentThreads"
     params = {
         "part": "snippet",
         "videoId": video_id,
-        "maxResults": 25, 
+        "maxResults": 25,
         "key": api_key
     }
 
-    comments = []
-    try:
-        # Faz a requisição para a API
-        response = requests.get(url, params=params, timeout=15)
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url, params=params)
         response.raise_for_status()
         data = response.json()
-
-        # Extrai os comentários
-        for item in data['items']:
-            if len(comments) >= 25:  # Limita a 25 comentários
-                break
-            comment = item['snippet']['topLevelComment']['snippet']['textDisplay']
-            comments.append(comment)
-    except requests.exceptions.RequestException as e:
-        print(f"Erro na requisição: {e}")
-
+    
+    comments = [
+        item['snippet']['topLevelComment']['snippet']['textDisplay']
+        for item in data.get('items', [])
+    ]
+    
     return comments
 
 # Endpoint para obter comentários do video youtube
