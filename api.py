@@ -3,9 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import torch
-import instaloader
+import requests
 import gdown
-import os
 
 url = "https://drive.google.com/drive/folders/1yXytE9ozUThCTdGawYve8h2XGLD_C9Wh"
 
@@ -70,54 +69,46 @@ async def predict_emotions_endpoint(request: TextRequest):
     results = predict_emotions_batch(texts)
     return results
 
-# Função para obter comentários de um post no Instagram
-def get_comments_instagram(username, password, post_shortcode):
-    L = instaloader.Instaloader()
-    L.context.http_proxies = {"http": "http://proxy_host:proxy_port", "https": "http://proxy_host:proxy_port"}
-    L.context.user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
-    session_file = f"./session-{username}"
+# Função para obter comentários de um video no youtube
+def get_comments(api_key, video_id):
+    url = f"https://www.googleapis.com/youtube/v3/commentThreads"
+    params = {
+        "part": "snippet",
+        "videoId": video_id,
+        "maxResults": 100,  # Número máximo de comentários por requisição
+        "key": api_key
+    }
 
-    def login_and_save_session():
-        try:
-            L.login(username, password)
-            L.save_session_to_file(filename=session_file)
-        except Exception as e:
-            raise HTTPException(status_code=401, detail=f"Erro ao fazer login: {e}")
-
-    try:
-        if os.path.exists(session_file):
-            L.load_session_from_file(username, filename=session_file)
-        else:
-            login_and_save_session()
-    except instaloader.exceptions.ConnectionException as e:
-        login_and_save_session()
-
-    # Validar sessão
-    try:
-        profile = instaloader.Profile.from_username(L.context, username)
-        if not profile.is_followed_by:
-            raise HTTPException(status_code=403, detail="Sessão inválida ou sem permissão.")
-    except Exception as e:
-        raise HTTPException(status_code=403, detail=f"Erro ao validar sessão: {e}")
-
-    # Coletar post
-    try:
-        post = instaloader.Post.from_shortcode(L.context, post_shortcode)
-    except Exception as e:
-        raise HTTPException(status_code=404, detail=f"Post não encontrado: {e}")
-
-    # Coletar comentários
     comments = []
-    try:
-        for comment in post.get_comments():
-            comments.append(comment.text)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro ao coletar comentários: {e}")
+    while True:
+        try:
+            # Faz a requisição para a API
+            response = requests.get(url, params=params, timeout=15)
+            response.raise_for_status()
+            data = response.json()
+
+            # Extrai os comentários
+            for item in data['items']:
+                comment = item['snippet']['topLevelComment']['snippet']['textDisplay']
+                comments.append(comment)
+
+            # Verifica se há mais páginas de resultados
+            next_page_token = data.get('nextPageToken')
+            if next_page_token:
+                # Se houver, faz a próxima requisição com o token da próxima página
+                params['pageToken'] = next_page_token
+            else:
+                # Se não houver mais páginas, encerra o loop
+                break
+
+        except requests.exceptions.RequestException as e:
+            print(f"Erro na requisição: {e}")
+            break
 
     return comments
 
 # Endpoint para obter comentários do Instagram
 @app.post("/get_comments")
 async def get_comments_endpoint(request: InstagramRequest):
-    comments = get_comments_instagram(request.username, request.password, request.post_shortcode)
+    comments = get_comments(request.api_key, request.video_id)
     return comments
