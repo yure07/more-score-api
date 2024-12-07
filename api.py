@@ -106,7 +106,7 @@ def get_comments(api_key, video_id):
 
     return comments
 
-# Endpoint para obter comentários do Instagram
+# Endpoint para obter comentários do video youtube
 @app.post("/get_comments")
 async def get_comments_endpoint(request: YoutubeRequest):
     comments = get_comments(request.api_key, request.video_id)
