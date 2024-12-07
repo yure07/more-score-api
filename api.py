@@ -60,13 +60,6 @@ def predict_emotions_batch(texts):
     
     return results
 
-# Endpoint para prever emoções
-@app.post("/predict_emotions")
-async def predict_emotions_endpoint(request: TextRequest):
-    texts = request.texts
-    results = predict_emotions_batch(texts)
-    return results
-
 # Função para obter comentários de um video no youtube
 async def get_comments(api_key, video_id):
     url = "https://www.googleapis.com/youtube/v3/commentThreads"
@@ -99,13 +92,23 @@ async def get_comments(api_key, video_id):
     except Exception as e:
         print(f"Erro inesperado: {e}")
         raise HTTPException(status_code=500, detail="Erro ao processar a requisição")
-
-# Endpoint para obter comentários do video youtube
-@app.post("/get_comments")
-async def get_comments_endpoint(request: YoutubeRequest):
+    
+# Nova rota combinada para obter comentários e prever emoções
+@app.post("/process_video")
+async def process_video(request: YoutubeRequest):
     try:
+        # Obter comentários do vídeo
         comments = await get_comments(request.api_key, request.video_id)
-        return comments
+        
+        if not comments:
+            raise HTTPException(status_code=404, detail="Nenhum comentário encontrado para este vídeo.")
+        
+        # Prever emoções dos comentários
+        results = predict_emotions_batch(comments)
+        
+        # Retornar a resposta combinada
+        return {"comentarios": comments, "emocao_analise": results}
+    
     except Exception as e:
-        print(f"Erro no endpoint /get_comments: {e}")
+        print(f"Erro no endpoint /process_video: {e}")
         raise HTTPException(status_code=500, detail="Erro ao processar a requisição")
