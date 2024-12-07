@@ -36,9 +36,8 @@ app.add_middleware(
     allow_headers=["*"],  
 )
 
-# Classe de modelo para receber os textos na requisição
 class TextRequest(BaseModel):
-    texts: list[str]  # Lista de textos para análise
+    texts: list[str]  
 
 class YoutubeRequest(BaseModel):
     api_key: str  
@@ -74,40 +73,34 @@ def get_comments(api_key, video_id):
     params = {
         "part": "snippet",
         "videoId": video_id,
-        "maxResults": 100,  # Número máximo de comentários por requisição
+        "maxResults": 25, 
         "key": api_key
     }
 
     comments = []
-    while True:
-        try:
-            # Faz a requisição para a API
-            response = requests.get(url, params=params, timeout=15)
-            response.raise_for_status()
-            data = response.json()
+    try:
+        # Faz a requisição para a API
+        response = requests.get(url, params=params, timeout=15)
+        response.raise_for_status()
+        data = response.json()
 
-            # Extrai os comentários
-            for item in data['items']:
-                comment = item['snippet']['topLevelComment']['snippet']['textDisplay']
-                comments.append(comment)
-
-            # Verifica se há mais páginas de resultados
-            next_page_token = data.get('nextPageToken')
-            if next_page_token:
-                # Se houver, faz a próxima requisição com o token da próxima página
-                params['pageToken'] = next_page_token
-            else:
-                # Se não houver mais páginas, encerra o loop
+        # Extrai os comentários
+        for item in data['items']:
+            if len(comments) >= 25:  # Limita a 25 comentários
                 break
-
-        except requests.exceptions.RequestException as e:
-            print(f"Erro na requisição: {e}")
-            break
+            comment = item['snippet']['topLevelComment']['snippet']['textDisplay']
+            comments.append(comment)
+    except requests.exceptions.RequestException as e:
+        print(f"Erro na requisição: {e}")
 
     return comments
 
 # Endpoint para obter comentários do video youtube
 @app.post("/get_comments")
 async def get_comments_endpoint(request: YoutubeRequest):
-    comments = get_comments(request.api_key, request.video_id)
-    return comments
+    try:
+        comments = get_comments(request.api_key, request.video_id)
+        return comments
+    except Exception as e:
+        print(f"Erro no endpoint /get_comments: {e}")
+        raise HTTPException(status_code=500, detail="Erro ao processar a requisição")
