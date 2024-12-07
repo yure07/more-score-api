@@ -5,6 +5,7 @@ from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import torch
 import gdown
 import httpx
+import gc
 
 url = "https://drive.google.com/drive/folders/1yXytE9ozUThCTdGawYve8h2XGLD_C9Wh"
 
@@ -15,6 +16,7 @@ gdown.download_folder(url, output=output_dir, quiet=False, use_cookies=False)
 path_model = "./model"
 model = AutoModelForSequenceClassification.from_pretrained(path_model)
 tokenizer = AutoTokenizer.from_pretrained(path_model)
+model.eval()
 
 # Labels de emoções
 emotion_labels = [
@@ -43,20 +45,30 @@ class YoutubeRequest(BaseModel):
     api_key: str  
     video_id: str 
 
+def batch_texts(texts, batch_size=10):
+    for i in range(0, len(texts), batch_size):
+        yield texts[i:i + batch_size]
+
 # Função para prever emoções de uma lista de textos
 def predict_emotions_batch(texts):
-    inputs = tokenizer(texts, return_tensors="pt", truncation=True, padding=True)
-    with torch.no_grad():
-        outputs = model(**inputs)
-        logits = outputs.logits
-    probs = torch.sigmoid(logits).cpu().numpy()
-    threshold = 0.5
+    for batch in batch_texts(texts):
+        inputs = tokenizer(batch, return_tensors="pt", truncation=True, padding=True)
+        with torch.no_grad():
+            outputs = model(**inputs)
+            logits = outputs.logits
+        probs = torch.sigmoid(logits).cpu().numpy()
+        threshold = 0.5
 
     results = []
     for text, prob_array in zip(texts, probs):
         predicted_emotions = [i for i, prob in enumerate(prob_array) if prob >= threshold]
         emotion_names = [emotion_labels[idx] for idx in predicted_emotions]
         results.append({"texto": text, "emocao_prevista": emotion_names})
+    
+    del inputs
+    del outputs
+    gc.collect()
+    torch.cuda.empty_cache()
     
     return results
 
