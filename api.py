@@ -40,10 +40,9 @@ app.add_middleware(
 class TextRequest(BaseModel):
     texts: list[str]  # Lista de textos para análise
 
-class InstagramRequest(BaseModel):
-    username: str  # Nome de usuário do Instagram
-    password: str  # Senha do Instagram
-    post_shortcode: str  # Shortcode do post no Instagram
+class YoutubeRequest(BaseModel):
+    api_key: str  
+    video_id: str 
 
 # Função para prever emoções de uma lista de textos
 def predict_emotions_batch(texts):
@@ -109,6 +108,6 @@ def get_comments(api_key, video_id):
 
 # Endpoint para obter comentários do Instagram
 @app.post("/get_comments")
-async def get_comments_endpoint(request: InstagramRequest):
+async def get_comments_endpoint(request: YoutubeRequest):
     comments = get_comments(request.api_key, request.video_id)
     return comments
