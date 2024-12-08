@@ -48,13 +48,15 @@ def load_model():
     model.eval()
     return model, tokenizer
 
-def batch_texts(texts, batch_size=10):
+def batch_texts(texts, batch_size=2):
     for i in range(0, len(texts), batch_size):
         yield texts[i:i + batch_size]
 
 # Função para prever emoções de uma lista de textos
 def predict_emotions_batch(texts):
     model, tokenizer = load_model()
+    device = torch.device("cpu")
+    model.to(device)
     results = []
     for batch in batch_texts(texts):
         inputs = tokenizer(batch, return_tensors="pt", truncation=True, padding=True)
