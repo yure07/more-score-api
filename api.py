@@ -108,22 +108,24 @@ async def get_comments(api_key, video_id):
         print(f"Erro inesperado: {e}")
         raise HTTPException(status_code=500, detail="Erro ao processar a requisição")
     
-# Nova rota combinada para obter comentários e prever emoções
-@app.post("/process_video")
-async def process_video(request: YoutubeRequest):
+@app.post("/get_comments")
+async def fetch_comments(request: YoutubeRequest):
     try:
-        # Obter comentários do vídeo
         comments = await get_comments(request.api_key, request.video_id)
-        
         if not comments:
             raise HTTPException(status_code=404, detail="Nenhum comentário encontrado para este vídeo.")
-        
-        # Prever emoções dos comentários
-        results = predict_emotions_batch(comments)
-        
-        # Retornar a resposta combinada
-        return {"comentarios": comments, "emocao_analise": results}
-    
+        return {"comentarios": comments}
     except Exception as e:
-        print(f"Erro no endpoint /process_video: {e}")
+        print(f"Erro no endpoint /get_comments: {e}")
+        raise HTTPException(status_code=500, detail="Erro ao processar a requisição")
+
+@app.post("/analyze_emotions")
+def analyze_emotions(request: TextRequest):
+    try:
+        if not request.texts:
+            raise HTTPException(status_code=400, detail="Nenhum texto enviado para análise.")
+        results = predict_emotions_batch(request.texts)
+        return {"analise_emocional": results}
+    except Exception as e:
+        print(f"Erro no endpoint /analyze_emotions: {e}")
         raise HTTPException(status_code=500, detail="Erro ao processar a requisição")
