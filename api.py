@@ -12,12 +12,6 @@ url = "https://drive.google.com/drive/folders/1yXytE9ozUThCTdGawYve8h2XGLD_C9Wh"
 output_dir = "./model"
 gdown.download_folder(url, output=output_dir, quiet=False, use_cookies=False)
 
-# Inicializa o modelo e o tokenizer
-path_model = "./model"
-model = AutoModelForSequenceClassification.from_pretrained(path_model)
-tokenizer = AutoTokenizer.from_pretrained(path_model)
-model.eval()
-
 # Labels de emoções
 emotion_labels = [
     "admiration", "amusement", "anger", "annoyance", "approval", "caring",
@@ -45,12 +39,23 @@ class YoutubeRequest(BaseModel):
     api_key: str  
     video_id: str 
 
+def load_model():
+    path_model = "./model"
+    model = AutoModelForSequenceClassification.from_pretrained(path_model)
+    model = AutoModelForSequenceClassification.from_pretrained(path_model, torch_dtype=torch.float16)
+    model = torch.quantization.quantize_dynamic(model, {torch.nn.Linear}, dtype=torch.qint8)
+    tokenizer = AutoTokenizer.from_pretrained(path_model)
+    model.eval()
+    return model, tokenizer
+
 def batch_texts(texts, batch_size=10):
     for i in range(0, len(texts), batch_size):
         yield texts[i:i + batch_size]
 
 # Função para prever emoções de uma lista de textos
 def predict_emotions_batch(texts):
+    model, tokenizer = load_model()
+    results = []
     for batch in batch_texts(texts):
         inputs = tokenizer(batch, return_tensors="pt", truncation=True, padding=True)
         with torch.no_grad():
@@ -59,17 +64,13 @@ def predict_emotions_batch(texts):
         probs = torch.sigmoid(logits).cpu().numpy()
         threshold = 0.5
 
-    results = []
-    for text, prob_array in zip(texts, probs):
-        predicted_emotions = [i for i, prob in enumerate(prob_array) if prob >= threshold]
-        emotion_names = [emotion_labels[idx] for idx in predicted_emotions]
-        results.append({"texto": text, "emocao_prevista": emotion_names})
-    
-    del inputs
-    del outputs
+        for text, prob_array in zip(batch, probs):
+            predicted_emotions = [i for i, prob in enumerate(prob_array) if prob >= threshold]
+            emotion_names = [emotion_labels[idx] for idx in predicted_emotions]
+            results.append({"texto": text, "emocao_prevista": emotion_names})
+
+    del model, tokenizer
     gc.collect()
-    torch.cuda.empty_cache()
-    
     return results
 
 # Função para obter comentários de um video no youtube
