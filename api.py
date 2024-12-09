@@ -42,8 +42,6 @@ class YoutubeRequest(BaseModel):
 def load_model():
     path_model = "./model"
     model = AutoModelForSequenceClassification.from_pretrained(path_model)
-    model = AutoModelForSequenceClassification.from_pretrained(path_model, torch_dtype=torch.float16)
-    model = torch.quantization.quantize_dynamic(model, {torch.nn.Linear}, dtype=torch.qint8)
     tokenizer = AutoTokenizer.from_pretrained(path_model)
     model.eval()
     return model, tokenizer
